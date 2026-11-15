@@ -8,7 +8,7 @@ export function createPaperclipMcpServer(config: PaperclipMcpConfig = readConfig
   const server = new McpServer({
     name: "paperclip",
     version: "0.1.0",
-  });
+  }, { maxToolInputElements: 10_000 });
 
   const client = new PaperclipApiClient(config);
   const tools = createToolDefinitions(client);

@@ -15,7 +15,7 @@ export function createGoogleSheetsMcpServer(
   const server = new McpServer({
     name: "paperclip-google-sheets",
     version: "0.1.0",
-  });
+  }, { maxToolInputElements: 10_000 });
 
   const client = options.client ?? createGoogleSheetsClient(config.serviceAccount);
   const tools = createToolDefinitions({

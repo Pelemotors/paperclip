@@ -17,7 +17,7 @@ export function createKvDemoMcpServer(store: KvStore = new KvStore()): CreateKvD
   const server = new McpServer({
     name: "paperclip-kv-demo",
     version: "0.1.0",
-  });
+  }, { maxToolInputElements: 10_000 });
 
   for (const tool of createToolDefinitions(store)) {
     server.registerTool(

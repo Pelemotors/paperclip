@@ -123,10 +123,12 @@ describe("paperclip MCP tools", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toEqual({
       title: "Assigned follow-up",
+      visibility: "open",
       workMode: "standard",
       priority: "medium",
       assigneeAgentId: "22222222-2222-2222-2222-222222222222",
       requestDepth: 0,
+      allowDuplicate: false,
     });
   });
 

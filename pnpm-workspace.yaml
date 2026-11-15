@@ -46,3 +46,36 @@ overrides:
   # Parsers and highlighters must share NodeProp IDs from one Lezer instance.
   # Mixed copies can interpret unrelated node metadata as highlighting tags.
   "@lezer/common": "^1.5.2"
+  # Security fixes stay within each consumer's major unless its upstream
+  # replacement removes the vulnerable dependency (Cursor SDK) or MSAL has
+  # no patched release on the old major. Keep in sync with package.json.
+  "@cursor/sdk@<1.1.0": "1.1.0"
+  "@azure/msal-node@>=5 <7.1.1": "7.1.1"
+  "@modelcontextprotocol/sdk@<1.32.0": "1.32.0"
+  "dompurify@<3.4.17": "3.4.17"
+  "proxy-addr@<2.0.8": "2.0.8"
+  "body-parser@>=2 <2.4.0": "2.4.0"
+  "multer@>=2 <2.5.0": "2.5.0"
+  "sharp@>=0.35.0 <0.35.5": "0.35.5"
+  "path-to-regexp@>=8 <8.4.0": "8.4.0"
+  "follow-redirects@<1.16.2": "1.16.2"
+  "js-yaml@>=4 <4.3.2": "4.3.2"
+  "source-map-js@<1.2.2": "1.2.2"
+  "vite@>=8 <8.2.4": "8.2.4"
+  "fast-uri@>=3 <3.1.9": "3.1.9"
+  "zod@>=4 <4.6.7": "4.6.7"
+  "undici@>=6 <6.29.1": "6.29.1"
+  "undici@>=7 <7.30.2": "7.30.2"
+  "undici@>=8 <8.12.4": "8.12.4"
+  "qs@>=6 <6.16.1": "6.16.1"
+  "hono@>=4 <4.13.16": "4.13.16"
+  "@hono/node-server@>=2 <2.1.6": "2.1.6"
+  "ip-address@>=10 <10.7.4": "10.7.4"
+  "fast-copy@>=4 <4.1.0": "4.1.0"
+  "postcss-selector-parser@>=6 <6.1.5": "6.1.5"
+  # These consumers only use esbuild.transform/transformSync and uuid.v4.
+  "@esbuild-kit/core-utils@3.3.2>esbuild": "0.25.12"
+  "svix@1.76.1>uuid": "11.1.1"
+  # Mermaid bundles KaTeX and DOMPurify, so overriding only its dependencies
+  # would leave the vulnerable bundled copies in the shipped UI.
+  "mermaid@>=12 <12.3.0": "12.3.0"

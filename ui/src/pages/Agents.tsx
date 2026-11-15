@@ -8,6 +8,7 @@ import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Link, useNavigate, useLocation } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { agentsApi, type OrgNode } from "../api/agents";
+import { costsApi } from "../api/costs";
 import { builtInAgentsApi, type BuiltInAgentState } from "../api/builtInAgents";
 import { environmentsApi } from "../api/environments";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -33,7 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { AlertTriangle, Bot, MessagesSquare } from "lucide-react";
-import { AGENT_ROLE_LABELS, type Agent, type Environment, type EnvironmentCapabilities } from "@paperclipai/shared";
+import { AGENT_ROLE_LABELS, type Agent, type Environment, type EnvironmentCapabilities, type OperatingContextAgent } from "@paperclipai/shared";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
 
 import { agentDisplayAdapterType, getAdapterLabel } from "../adapters/adapter-display-registry";
@@ -249,6 +250,17 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } = 
     enabled: !!selectedCompanyId,
   });
   const { data: agents, isLoading } = agentsQuery;
+  const { data: operatingContext } = useQuery({
+    queryKey: queryKeys.operatingContext(selectedCompanyId!),
+    queryFn: () => costsApi.operatingContext(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    staleTime: 30_000,
+  });
+  const runtimeByAgentId = useMemo(() => {
+    const map = new Map<string, OperatingContextAgent>();
+    for (const entry of operatingContext?.agents ?? []) map.set(entry.id, entry);
+    return map;
+  }, [operatingContext?.agents]);
   const rosterFilters = useAgentRosterFilters(selectedCompanyId, agents);
   const agentsView = useQueryView(agentsQuery);
 
@@ -399,6 +411,10 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } = 
         )}
       </>
     ) : null;
+    const runtime = runtimeByAgentId.get(agent.id);
+    const configuredModel = runtime?.configuredModel ?? getConfiguredModel(agent);
+    const profileLabel = runtime?.profile ? `profile ${runtime.profile}` : null;
+    const observedModel = runtime?.lastObservedModel ? `observed ${runtime.lastObservedModel}` : "observed —";
     return (
       <div key={agent.id} className="agent-pin-row agent-roster-pin-row group/agent-pin relative">
       <EntityRow
@@ -415,10 +431,13 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } = 
         ) : (
           <AgentAvatar agent={agent} size={32} />
         )}
-        secondaryRowClassName={cn("pl-11", !builtInCluster && !showEnvironmentColumn && !agent.lastHeartbeatAt && "sm:hidden")}
-        secondaryRow={(agent.status === "paused" || builtInCluster || showEnvironmentColumn || agent.lastHeartbeatAt) && (
+        secondaryRowClassName={cn("pl-11", !builtInCluster && !showEnvironmentColumn && !agent.lastHeartbeatAt && !runtime && "sm:hidden")}
+        secondaryRow={(agent.status === "paused" || builtInCluster || showEnvironmentColumn || agent.lastHeartbeatAt || runtime) && (
           <div className="flex flex-wrap items-center gap-2">
             {builtInCluster}
+            {runtime && <span className="text-xs text-muted-foreground" title="Configured runtime profile and model">
+              {[profileLabel, configuredModel ?? "configured model unknown", observedModel].filter(Boolean).join(" · ")}
+            </span>}
             {showEnvironmentColumn && <span className="text-xs text-muted-foreground" title={resolveRenderedEnvironment(agent.id).title}>
               {resolveRenderedEnvironment(agent.id).label} · {resolveRenderedEnvironment(agent.id).detail}
             </span>}

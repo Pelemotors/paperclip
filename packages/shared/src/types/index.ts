@@ -1073,6 +1073,14 @@ export type {
 } from "./access.js";
 export type { QuotaWindow, ProviderQuotaResult } from "./quota.js";
 export type {
+  OperatingContext,
+  OperatingContextAgent,
+  OperatingContextRun,
+  OperatingContextTask,
+  OperatingContextUsage,
+  ProviderOperationalObservation,
+} from "./operating-context.js";
+export type {
   CompanyPortabilityInclude,
   CompanyPortabilityEnvInput,
   CompanyPortabilityFileEntry,

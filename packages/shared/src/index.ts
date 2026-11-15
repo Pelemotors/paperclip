@@ -1685,6 +1685,12 @@ export type {
   OAuthRedirectConstraints,
   QuotaWindow,
   ProviderQuotaResult,
+  OperatingContext,
+  OperatingContextAgent,
+  OperatingContextRun,
+  OperatingContextTask,
+  OperatingContextUsage,
+  ProviderOperationalObservation,
 } from "./types/index.js";
 export { WORKSPACE_READINESS_STATES, WORKSPACE_SOURCE_VERIFICATION_REASONS,
   type WorkspaceSourceVerificationFailure, type WorkspaceSourceInspection } from "./types/index.js";

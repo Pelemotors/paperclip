@@ -6,7 +6,7 @@ import type { SshRemoteExecutionSpec } from "./ssh.js";
 import type { AdapterExecutionTarget } from "./execution-target.js";
 import type { RuntimeStatusSink } from "./runtime-progress.js";
 import type { AdapterExecutionPhaseSink } from "./execution-phase.js";
-import type { ExecutionContinuationEnvelope, NativeFinalizationResult } from "@paperclipai/shared";
+import type { ExecutionContinuationEnvelope, NativeFinalizationResult, ProviderOperationalObservation } from "@paperclipai/shared";
 
 export interface AdapterAgent {
   id: string;
@@ -543,6 +543,13 @@ export interface ServerAdapterModule {
    * without knowing provider-specific credential paths or API shapes.
    */
   getQuotaWindows?: () => Promise<ProviderQuotaResult>;
+  /** Optional read-only provider snapshot for an authorized company observer. */
+  inspectOperationalStatus?: (ctx: {
+    companyId: string;
+    agentId: string;
+    adapterConfig: Record<string, unknown>;
+    signal?: AbortSignal;
+  }) => Promise<ProviderOperationalObservation>;
   /**
    * Optional: detect the currently configured model from local config files.
    * Returns the detected model/provider and the config source, or null if

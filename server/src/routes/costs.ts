@@ -33,6 +33,7 @@ import {
 } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getAccessibleResource, getActorInfo } from "./authz.js";
 import { fetchCompanyQuotaWindows } from "../services/quota-windows.js";
+import { operatingContextService } from "../services/operating-context.js";
 import { attentionHandledDetails, attentionHandledFor } from "../services/attention-receipts.js";
 import { badRequest, forbidden } from "../errors.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
@@ -85,6 +86,7 @@ export function costRoutes(
   const agents = agentService(db);
   const issues = issueService(db);
   const access = accessService(db);
+  const operatingContext = operatingContextService(db);
 
   function costReaderActor(req: Parameters<typeof assertCompanyAccess>[0], companyId: string) {
     assertBoard(req);
@@ -342,6 +344,57 @@ export function costRoutes(
     }
     const results = await fetchCompanyQuotaWindows(db, companyId, getActorInfo(req).actorId);
     res.json(results);
+  });
+
+  router.get("/companies/:companyId/operating-context", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    if (!(await companies.getById(companyId))) {
+      res.status(404).json({ error: "Company not found" });
+      return;
+    }
+    if (req.actor.type === "agent") {
+      if (!req.actor.agentId) {
+        res.status(403).json({ error: "CEO agent identity is required" });
+        return;
+      }
+      const observer = await agents.getById(req.actor.agentId);
+      if (!observer || observer.companyId !== companyId || observer.role !== "ceo" || ["terminated", "paused", "pending_approval"].includes(observer.status)) {
+        res.status(403).json({ error: "Only an active CEO agent may read operating context" });
+        return;
+      }
+    } else {
+      if (!(await assertCompanyCostReadAllowed(req, res, companyId))) return;
+    }
+    const decision = await access.decide({
+      actor: req.actor,
+      action: "company_scope:read",
+      resource: { type: "company", companyId },
+    });
+    if (!decision.allowed) {
+      res.status(403).json({ error: "Operating context is outside this actor's authorization boundary" });
+      return;
+    }
+    const range = parseCostDateRange(req.query);
+    const parseUuidQuery = (key: string) => {
+      const value = req.query[key];
+      if (value === undefined) return undefined;
+      if (typeof value !== "string" || !z.string().uuid().safeParse(value).success) throw badRequest(`invalid '${key}'`);
+      return value;
+    };
+    const workerId = parseUuidQuery("workerId");
+    const taskId = parseUuidQuery("taskId");
+    const requestedProfile = req.query.profile;
+    if (requestedProfile !== undefined && (typeof requestedProfile !== "string" || !["claude", "codex", "qwen"].includes(requestedProfile))) {
+      throw badRequest("invalid 'profile'");
+    }
+    res.json(await operatingContext.get(companyId, {
+      from: range && "from" in range ? range.from : undefined,
+      to: range && "to" in range ? range.to : undefined,
+      workerId,
+      taskId,
+      profile: requestedProfile as string | undefined,
+    }));
   });
 
   router.get("/companies/:companyId/budgets/overview", async (req, res) => {

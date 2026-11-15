@@ -19,6 +19,7 @@ import type {
   FinanceEvent,
   QuotaWindow,
   ProviderQuotaResult,
+  OperatingContext,
 } from "@paperclipai/shared";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronRight, Coins, DollarSign, ReceiptText } from "lucide-react";
 import { budgetsApi } from "../api/budgets";
@@ -115,6 +116,61 @@ function MetricTile({
           <Icon className="h-4 w-4 text-muted-foreground" />
         </div>
       </div>
+    </Card>
+  );
+}
+
+function OperatingContextPanel({
+  context,
+  loading,
+  error,
+}: {
+  context?: OperatingContext;
+  loading: boolean;
+  error: unknown;
+}) {
+  if (loading && !context) return <p role="status" className="text-sm text-muted-foreground">Loading operating context…</p>;
+  if (error && !context) return <p role="alert" className="text-sm text-destructive">Operating context is unavailable. Provider data was not inferred.</p>;
+  if (!context) return null;
+  const unknown = "Unknown";
+  return (
+    <Card>
+      <CardHeader className="px-5 pt-5 pb-3">
+        <CardTitle className="text-base">Engine and usage status</CardTitle>
+        <CardDescription>
+          Read-only snapshot from Paperclip and approved provider observers. Captured {new Date(context.capturedAt).toLocaleString()}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 px-5 pb-5 pt-0">
+        <div className="grid gap-3 md:grid-cols-4">
+          <MetricTile label="Measured usage" value={formatTokens(context.usage.measured.inputTokens + context.usage.measured.cachedInputTokens + context.usage.measured.outputTokens)} subtitle={`${context.usage.measured.runCount} recorded runs`} icon={ArrowUpRight} />
+          <MetricTile label="Estimated list cost" value={context.usage.estimatedListCostUsd == null ? unknown : `$${context.usage.estimatedListCostUsd.toFixed(4)}`} subtitle="Not a card charge" icon={Coins} />
+          <MetricTile label="Recorded incremental" value={context.usage.recordedIncrementalCostUsd == null ? unknown : `$${context.usage.recordedIncrementalCostUsd.toFixed(4)}`} subtitle="Only billing types recorded by Paperclip" icon={DollarSign} />
+          <MetricTile label="Invoice-verified" value={context.usage.invoiceVerifiedBillingUsd == null ? unknown : `$${context.usage.invoiceVerifiedBillingUsd.toFixed(4)}`} subtitle={context.usage.invoiceVerifiedBillingUsd == null ? "Not verified" : `${context.usage.invoiceVerifiedEventCount} invoice-linked events`} icon={ReceiptText} />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {context.agents.map((agent) => {
+            const blocked = agent.executionAllowedByPreflight === false;
+            return (
+              <div key={agent.id} className="rounded-lg border border-border/70 p-3 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0"><div className="font-medium truncate">{agent.name}</div><div className="text-xs text-muted-foreground">{agent.title || agent.role}</div></div>
+                  <span className={blocked ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}>{blocked ? "Blocked" : "Available"}</span>
+                </div>
+                <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  <dt className="text-muted-foreground">Profile</dt><dd>{agent.profile ?? unknown} · {agent.executionMode}</dd>
+                  <dt className="text-muted-foreground">Configured</dt><dd>{agent.configuredModel ?? unknown}</dd>
+                  <dt className="text-muted-foreground">Observed</dt><dd>{agent.lastObservedModel ?? unknown}</dd>
+                  <dt className="text-muted-foreground">Auth</dt><dd>{agent.authStatus}</dd>
+                  {agent.observation?.windows.length ? <><dt className="text-muted-foreground">Quota</dt><dd>{agent.observation.windows.map(window => `${window.label}: ${window.usedPercent == null ? unknown : `${window.usedPercent}%`}`).join(" · ")}</dd></> : null}
+                  {agent.blockingReasons.length ? <><dt className="text-muted-foreground">Reason</dt><dd className="text-destructive">{agent.blockingReasons.join("; ")}</dd></> : null}
+                </dl>
+              </div>
+            );
+          })}
+        </div>
+        {context.limitations.map((limitation) => <p key={limitation} className="text-xs text-muted-foreground">{limitation}</p>)}
+      </CardContent>
     </Card>
   );
 }
@@ -413,6 +469,13 @@ export function Costs({
     enabled: !!selectedCompanyId && mainTab === "providers",
     refetchInterval: 300_000,
     staleTime: 60_000,
+  });
+
+  const { data: operatingContext, isLoading: operatingContextLoading, error: operatingContextError } = useQuery({
+    queryKey: queryKeys.operatingContext(companyId),
+    queryFn: () => costsApi.operatingContext(companyId),
+    enabled: !!selectedCompanyId && mainTab === "providers",
+    staleTime: 30_000,
   });
 
   const byProvider = useMemo(() => {
@@ -1036,6 +1099,7 @@ export function Costs({
         </TabsContent>
 
         <TabsContent value="providers" className="mt-4 space-y-4">
+          <OperatingContextPanel context={operatingContext} loading={operatingContextLoading} error={operatingContextError} />
           {showCustomPrompt ? (
             <p className="text-sm text-muted-foreground">Select a start and end date to load data.</p>
           ) : (

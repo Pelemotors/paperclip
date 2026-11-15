@@ -25,6 +25,8 @@ export interface AgentPermissions extends Record<string, unknown> {
   trustPreset?: TrustPreset;
   authorizationPolicy?: TrustAuthorizationPolicy;
   interactions?: AgentInteractionPermissions;
+  /** Adapter-owned permissions keyed by adapter type; never native trust policy. */
+  adapterPermissions?: Record<string, unknown>;
 }
 
 export interface AgentProjectAccess {

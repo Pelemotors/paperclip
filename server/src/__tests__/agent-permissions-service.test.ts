@@ -8,9 +8,38 @@ import {
   defaultAgentPermissions,
   normalizeAgentPermissions,
   permissionsImplyLowTrust,
+  preserveAdapterPermissions,
+  assertNoInitialAdapterPermissions,
 } from "../lib/agent-permissions.js";
 
 describe("agent permissions service", () => {
+  it("preserves adapter-scoped permissions without treating them as native trust policy", () => {
+    const adapterPermissions = {
+      example_adapter: { grants: [{ capability: "documents:read", resource: "assigned-task" }], trustPreset: "low_trust" },
+    };
+    const parsed = updateAgentPermissionsSchema.parse({
+      canCreateAgents: false, canAssignTasks: false, adapterPermissions,
+    });
+    expect(parsed).toHaveProperty("adapterPermissions", adapterPermissions);
+    expect(normalizeAgentPermissions(parsed)).toHaveProperty("adapterPermissions", adapterPermissions);
+    expect(permissionsImplyLowTrust({ adapterPermissions })).toBe(false);
+    expect(parsed.authorizationPolicy).toBeUndefined();
+  });
+
+  it("requires the permissions endpoint for initial grants and configuration changes", () => {
+    const adapterPermissions = { example_adapter: { grants: ["documents:read"] } };
+    expect(agentPermissionsSchema.safeParse({ adapterPermissions }).success).toBe(false);
+    expect(() => assertNoInitialAdapterPermissions({ adapterPermissions })).toThrow(/\/permissions/);
+    expect(() => assertNoInitialAdapterPermissions({ adapterPermissions: {} })).toThrow(/\/permissions/);
+    expect(() => assertNoInitialAdapterPermissions({})).not.toThrow();
+    expect(preserveAdapterPermissions({ adapterPermissions }, { canCreateAgents: false }))
+      .toEqual({ canCreateAgents: false, adapterPermissions });
+    expect(preserveAdapterPermissions({ adapterPermissions }, { adapterPermissions: structuredClone(adapterPermissions) }))
+      .toEqual({ adapterPermissions });
+    expect(() => preserveAdapterPermissions({ adapterPermissions }, { adapterPermissions: {} })).toThrow(/\/permissions/);
+    expect(() => preserveAdapterPermissions({}, { adapterPermissions })).toThrow(/\/permissions/);
+  });
+
   it("grants agent-creation authority to new agents by default", () => {
     expect(defaultAgentPermissions({ context: "create" }).canCreateAgents).toBe(true);
     expect(normalizeAgentPermissions(undefined, { context: "create" }).canCreateAgents).toBe(true);

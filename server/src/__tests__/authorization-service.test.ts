@@ -16,7 +16,7 @@ import {
   projects,
   userInboxAgentPolicies,
 } from "@paperclipai/db";
-import { LOW_TRUST_REVIEW_PRESET, type PermissionKey } from "@paperclipai/shared";
+import { LOW_TRUST_REVIEW_PRESET, updateAgentPermissionsSchema, type PermissionKey } from "@paperclipai/shared";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
@@ -700,6 +700,40 @@ describeEmbeddedPostgres("authorization service", () => {
       reason: "allow_visible_issue_write",
     });
     expect(decision.explanation).toContain("shared default-open");
+  });
+
+  it("persists adapter permissions without changing native task assignment authority", async () => {
+    const company = await createCompany(db, "AdapterPermissions");
+    const actorAgent = await createAgent(db, company.id);
+    const targetAgent = await createAgent(db, company.id);
+    await db.insert(companyMemberships).values({ companyId: company.id, principalType: "agent",
+      principalId: actorAgent.id, status: "active", membershipRole: "member" });
+    const adapterPermissions = { example_adapter: {
+      grants: [{ capability: "documents:read", resource: targetAgent.id }],
+      trustPreset: LOW_TRUST_REVIEW_PRESET,
+      authorizationPolicy: { unrecognizedAdapterProperty: true },
+    } };
+    const { agentService } = await import("../services/agents.js");
+    const svc = agentService(db);
+    const parsed = updateAgentPermissionsSchema.parse({ canCreateAgents: false, canAssignTasks: false, adapterPermissions });
+    await svc.updatePermissions(actorAgent.id, parsed);
+    // Unrelated permission saves retain the adapter's entire opaque value.
+    await svc.updatePermissions(actorAgent.id, { canCreateAgents: false });
+    expect((await svc.getById(actorAgent.id))?.permissions).toHaveProperty("adapterPermissions", adapterPermissions);
+    const decision = await authorizationService(db).decide({
+      actor: { type: "agent", agentId: actorAgent.id, companyId: company.id, source: "agent_key" },
+      action: "tasks:assign",
+      resource: { type: "issue", companyId: company.id, assigneeAgentId: targetAgent.id },
+      scope: { assigneeAgentId: targetAgent.id },
+    });
+    expect(decision).toMatchObject({ allowed: true, reason: "allow_visible_issue_write" });
+    // Adapter metadata never authorizes cross-company task assignment.
+    const otherCompany = await createCompany(db, "AdapterPermissionsOther");
+    await expect(authorizationService(db).decide({
+      actor: { type: "agent", agentId: actorAgent.id, companyId: company.id, source: "agent_key" },
+      action: "tasks:assign",
+      resource: { type: "issue", companyId: otherCompany.id, assigneeAgentId: targetAgent.id },
+    })).resolves.toMatchObject({ allowed: false, reason: "deny_company_boundary" });
   });
 
   it("allows standard-trust agents to comment on and update visible peer-owned issues", async () => {

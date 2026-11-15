@@ -18,7 +18,7 @@ import { normalizePaperclipRunnerAdapterConfig } from "@paperclipai/adapter-util
 import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { agentRecordQueries, type UpdateAgentOptions, type AgentConfigurationPatch, type AgentConfigurationRecord, isPlainRecord, buildConfigSnapshot,
   hasConfigPatchFields, changedPendingApprovalConfigFields, diffConfigSnapshot, jsonEqual } from "../lib/agent-records.js";
-import { CEO_HIRING_DENIAL_KEY, ceoHiringDenial, normalizeAgentPermissions } from "../lib/agent-permissions.js";
+import { CEO_HIRING_DENIAL_KEY, ceoHiringDenial, normalizeAgentPermissions, preserveAdapterPermissions } from "../lib/agent-permissions.js";
 import type { ActivityPublication } from "../types/activity-publication.js";
 import { secretService, assertClaudeOAuthBindingInvariant } from "./secrets.js";
 import { agentCredentialService } from "./agent-credentials.js";
@@ -42,7 +42,8 @@ export async function lockAgentConfigurationInteractions(tx: Db, id: string, dat
 export async function prepareAgentConfiguration(db: Db, existing: AgentConfigurationRecord, data: AgentConfigurationPatch, options?: UpdateAgentOptions): Promise<AgentConfigurationPatch> {
   await assertAgentInteraction(db, { companyId: existing.companyId, actorAgentId: options?.recordRevision?.createdByAgentId,
     operation: "mention", texts: changedConfigurationText(data, existing) });
-  if (data.permissions !== undefined) data = { ...data, permissions: preserveAgentInteractionPermissions(existing.permissions, data.permissions) };
+  if (data.permissions !== undefined) data = { ...data, permissions: preserveAdapterPermissions(existing.permissions,
+    preserveAgentInteractionPermissions(existing.permissions, data.permissions)) };
   if (options?.recordRevision?.createdByAgentId && data.budgetMonthlyCents !== undefined && data.budgetMonthlyCents !== existing.budgetMonthlyCents) {
     throw forbidden("Only board operators can change agent budgets");
   }

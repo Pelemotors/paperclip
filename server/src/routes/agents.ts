@@ -5142,6 +5142,13 @@ export function agentRoutes(
         canCreateSkills: agent.permissions?.canCreateSkills ?? true,
         canAssignTasks: effectiveCanAssignTasks,
         trustPreset: agent.permissions?.trustPreset ?? "standard",
+        ...(req.body.adapterPermissions !== undefined ? {
+          // Include removed namespaces too; keep adapter-specific contents out of the shared audit log.
+          adapterPermissionNamespaces: [...new Set([
+            ...Object.keys(asRecord(existing.permissions?.adapterPermissions) ?? {}),
+            ...Object.keys(req.body.adapterPermissions),
+          ])].sort(),
+        } : {}),
       },
     });
 

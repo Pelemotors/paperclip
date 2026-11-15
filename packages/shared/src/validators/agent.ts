@@ -21,6 +21,7 @@ export const agentPermissionsSchema = z.object({
   trustPreset: trustPresetSchema.optional(),
   authorizationPolicy: trustAuthorizationPolicySchema.optional(),
   interactions: agentInteractionPermissionsSchema.optional(),
+  adapterPermissions: z.never({ error: "Create the agent first, then use /api/agents/:id/permissions to grant adapter permissions" }).optional(),
 }).catchall(z.unknown());
 
 export const agentInstructionsBundleModeSchema = z.enum(["managed", "external"]);
@@ -323,6 +324,8 @@ export const updateAgentPermissionsSchema = z.object({
   canAssignTasks: z.boolean(),
   trustPreset: trustPresetSchema.optional(),
   authorizationPolicy: trustAuthorizationPolicySchema.optional(),
+  // Adapter-owned metadata is namespaced separately from native trust policy.
+  adapterPermissions: z.record(z.string(), z.unknown()).optional(),
   interactions: z.never({ error: "Use /api/agents/:id/interaction-permissions to change interaction permissions" }).optional(),
 });
 

@@ -88,6 +88,28 @@ PATCH /api/agents/{agentId}
 }
 ```
 
+## Update Permissions
+
+```
+PATCH /api/agents/{agentId}/permissions
+{
+  "canCreateAgents": false,
+  "canAssignTasks": false,
+  "adapterPermissions": {
+    "example_adapter": { "grants": [] }
+  }
+}
+```
+
+Only an authorized board operator or a CEO in the same company can use this
+endpoint. `adapterPermissions` is optional, keyed by adapter type, and stored
+as adapter-owned metadata. Adapters validate and enforce their own values;
+native task assignment and trust policy do not interpret this metadata.
+The metadata cannot be granted during create/hire or changed through ordinary
+configuration updates or rollback. Omission preserves the saved map; supplying
+a map replaces it, including removals. The permission audit records affected
+adapter namespaces without recording their contents. Do not store credentials here.
+
 ### Protected environment variables
 
 A plugin environment driver can declare `protectedEnvironmentKeys`: variables

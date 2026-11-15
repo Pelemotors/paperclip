@@ -12,6 +12,7 @@ import { unprocessable } from "../errors.js";
 import { agentRecordQueries, isPlainRecord, configPatchFromApprovalPayload, normalizeRuntimeConfigForNewAgent,
   deduplicateAgentName, type CreateAgentData, type CreateAgentOptions, type AgentConfigurationPatch, type AgentHireRecord } from "../lib/agent-records.js";
 import { CEO_HIRING_DENIAL_KEY, normalizeAgentPermissions, permissionsImplyLowTrust, NEW_STANDARD_AGENT_DEFAULT_GRANT_KEYS,
+  assertNoInitialAdapterPermissions, preserveAdapterPermissions,
   newStandardAgentGrantScope } from "../lib/agent-permissions.js";
 import { readBuiltInAgentMarker } from "../lib/built-in-agent-metadata.js";
 import { secretService, assertClaudeOAuthBindingInvariant } from "./secrets.js";
@@ -24,6 +25,7 @@ import { assertProviderApiPlacementPolicy, isProviderApiSetupDraft, resolveProvi
 
 export async function prepareAgentHire(db: Db, companyId: string, input: CreateAgentData, options?: CreateAgentOptions): Promise<CreateAgentData> {
   assertNoInitialAgentInteractionPermissions(input.permissions);
+  assertNoInitialAdapterPermissions(input.permissions);
   await assertAgentInteraction(db, { companyId, actorAgentId: options?.createdByAgentId, actorCompanyId: options?.createdByAgentCompanyId,
     operation: "mention", texts: [JSON.stringify(input), ...(options?.interactionTexts ?? [])], lock: "update" });
   await notifyAttentionRetentionWork(db, { companyId });
@@ -140,7 +142,8 @@ export async function prepareAgentHireApproval(txDb: Db, existing: AgentHireReco
   if (patch.permissions !== undefined) {
     // The pending-approval activation replays the original hire
     // request, so the new-agent creation default applies.
-    patch.permissions = normalizeAgentPermissions(preserveAgentInteractionPermissions(existing.permissions, patch.permissions), { context: "create" });
+    patch.permissions = normalizeAgentPermissions(preserveAdapterPermissions(existing.permissions,
+      preserveAgentInteractionPermissions(existing.permissions, patch.permissions)), { context: "create" });
   }
   if (hasApprovedAdapterConfig) {
     await agentCredentialService(txDb).enforceClaudeOAuthBindingClaim(txDb, {

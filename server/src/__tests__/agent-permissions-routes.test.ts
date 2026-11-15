@@ -2310,6 +2310,34 @@ describe("agent permission routes", () => {
     expect(res.body.permissions.canCreateSkills).toBe(false);
   });
 
+  it.each(["ceo", "board"])("allows %s to update adapter permissions through the audited endpoint", async (role) => {
+    const ceo = { ...baseAgent, id: "ceo-agent", role: "ceo" };
+    const adapterPermissions = { example_adapter: { grants: ["documents:read"] } };
+    const existing = { ...baseAgent, permissions: { canCreateAgents: false, adapterPermissions: { retired_adapter: {} } } };
+    mockAgentService.getById.mockImplementation(async (id: string) => id === ceo.id ? ceo : existing);
+    mockAgentService.updatePermissions.mockResolvedValue({ ...baseAgent, permissions: { canCreateAgents: false, adapterPermissions } });
+    const app = createApp(role === "ceo"
+      ? { type: "agent", agentId: ceo.id, companyId, source: "agent_key" }
+      : { type: "board", userId: "board-user", source: "local_implicit", isInstanceAdmin: true, companyIds: [companyId] });
+    const res = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}/permissions`)
+      .send({ canCreateAgents: false, canAssignTasks: false, adapterPermissions }));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(mockAgentService.updatePermissions).toHaveBeenCalledWith(agentId,
+      { canCreateAgents: false, canAssignTasks: false, adapterPermissions }, { actorAgentId: role === "ceo" ? ceo.id : null });
+    expect(mockLogActivity).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      action: "agent.permissions_updated",
+      details: expect.objectContaining({ adapterPermissionNamespaces: ["example_adapter", "retired_adapter"] }),
+    }));
+  });
+
+  it("does not let ordinary workers grant themselves adapter permissions", async () => {
+    const app = createApp({ type: "agent", agentId, companyId, source: "agent_key" });
+    const res = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}/permissions`)
+      .send({ canCreateAgents: false, canAssignTasks: false, adapterPermissions: { example_adapter: { grants: ["all"] } } }));
+    expect(res.status).toBe(403);
+    expect(mockAgentService.updatePermissions).not.toHaveBeenCalled();
+  });
+
   it("does not let a CEO denied hiring restore it for itself or grant it to another agent", async () => {
     const ceo = { ...baseAgent, id: "ceo-agent", role: "ceo", permissions: { canCreateAgents: false, canCreateSkills: true,
       ceoHiringDeniedBy: { actorType: "user", actorId: "board-user", at: "2026-11-08T00:00:00.000Z" } } };
@@ -2391,7 +2419,7 @@ describe("agent permission routes", () => {
 
     const res = await requestApp(app, (baseUrl) => request(baseUrl)
       .patch(`/api/agents/${agentId}/permissions`)
-      .send({ canCreateAgents: true, canAssignTasks: true }));
+      .send({ canCreateAgents: true, canAssignTasks: true, adapterPermissions: { example_adapter: {} } }));
 
     // Cross-tenant requests return 404 (not 403) so the status code cannot be
     // used as an existence oracle for other tenants' agent ids.

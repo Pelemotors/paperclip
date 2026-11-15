@@ -1,4 +1,6 @@
 import { LOW_TRUST_REVIEW_PRESET, type PermissionKey } from "@paperclipai/shared";
+import { isDeepStrictEqual } from "node:util";
+import { forbidden } from "../errors.js";
 
 /** Direct grants for newly activated standard agents. Existing agents are not backfilled. */
 export const NEW_STANDARD_AGENT_DEFAULT_GRANT_KEYS = [
@@ -37,6 +39,26 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+const adapterPermissionsEndpointMessage = "Use PATCH /api/agents/:id/permissions to change adapter permissions";
+
+/** Generic configuration saves and approval replays cannot grant or erase adapter authority. */
+export function preserveAdapterPermissions(existing: unknown, incoming: unknown): Record<string, unknown> {
+  const previous = asRecord(existing) ?? {};
+  const next = { ...(asRecord(incoming) ?? {}) };
+  if (Object.hasOwn(next, "adapterPermissions") && !isDeepStrictEqual(next.adapterPermissions, previous.adapterPermissions)) {
+    throw forbidden(adapterPermissionsEndpointMessage, { code: "adapter_permissions_separate_endpoint" });
+  }
+  if (Object.hasOwn(previous, "adapterPermissions")) next.adapterPermissions = previous.adapterPermissions;
+  else delete next.adapterPermissions;
+  return next;
+}
+
+export function assertNoInitialAdapterPermissions(permissions: unknown): void {
+  if (Object.hasOwn(asRecord(permissions) ?? {}, "adapterPermissions")) {
+    throw forbidden(adapterPermissionsEndpointMessage, { code: "adapter_permissions_separate_endpoint" });
+  }
 }
 
 /**

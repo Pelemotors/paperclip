@@ -82,18 +82,18 @@ describe("secondsToWindowLabel", () => {
     expect(secondsToWindowLabel(undefined, "Secondary")).toBe("Secondary");
   });
 
-  it("labels windows under 6 hours as '5h'", () => {
-    expect(secondsToWindowLabel(3600, "fallback")).toBe("5h");   // 1h
+  it("labels windows under a day from their actual duration", () => {
+    expect(secondsToWindowLabel(3600, "fallback")).toBe("1h");   // 1h
     expect(secondsToWindowLabel(18000, "fallback")).toBe("5h");  // 5h exactly
   });
 
-  it("labels windows up to 24 hours as '24h'", () => {
-    expect(secondsToWindowLabel(21600, "fallback")).toBe("24h"); // 6h (≥6h boundary)
-    expect(secondsToWindowLabel(86400, "fallback")).toBe("24h"); // 24h exactly
+  it("labels a full day from the provider duration", () => {
+    expect(secondsToWindowLabel(21600, "fallback")).toBe("6h"); // 6h
+    expect(secondsToWindowLabel(86400, "fallback")).toBe("1d"); // 24h exactly
   });
 
-  it("labels windows up to 7 days as '7d'", () => {
-    expect(secondsToWindowLabel(86401, "fallback")).toBe("7d");   // just over 24h
+  it("labels weekly duration from the provider value", () => {
+    expect(secondsToWindowLabel(86401, "fallback")).toBe("1d");   // just over 24h
     expect(secondsToWindowLabel(604800, "fallback")).toBe("7d"); // 7d exactly
   });
 
@@ -699,7 +699,7 @@ describe("fetchCodexQuota", () => {
     });
     const windows = await fetchCodexQuota("token", null);
     expect(windows).toHaveLength(1);
-    expect(windows[0]).toMatchObject({ label: "5h limit", usedPercent: 30, resetsAt: "2026-01-02T00:00:00.000Z" });
+    expect(windows[0]).toMatchObject({ label: "1d", windowDurationSeconds: 86400, windowKind: "other", usedPercent: 30, resetsAt: "2026-01-02T00:00:00.000Z" });
   });
 
   it("parses secondary_window alongside primary_window", async () => {
@@ -711,8 +711,8 @@ describe("fetchCodexQuota", () => {
     });
     const windows = await fetchCodexQuota("token", null);
     expect(windows).toHaveLength(2);
-    expect(windows[0]!.label).toBe("5h limit");
-    expect(windows[1]!.label).toBe("Weekly limit");
+    expect(windows[0]!.label).toBe("5h");
+    expect(windows[1]!.label).toBe("7d");
   });
 
   it("includes Credits window when credits present and not unlimited", async () => {
@@ -772,28 +772,36 @@ describe("mapCodexRpcQuota", () => {
     expect(snapshot.planType).toBe("pro");
     expect(snapshot.windows).toEqual([
       {
-        label: "5h limit",
+        label: "5h",
+        windowDurationSeconds: 18000,
+        windowKind: "five_hour",
         usedPercent: 1,
         resetsAt: "2025-11-18T21:06:40.000Z",
         valueLabel: null,
         detail: null,
       },
       {
-        label: "Weekly limit",
+        label: "7d",
+        windowDurationSeconds: 604800,
+        windowKind: "weekly",
         usedPercent: 27,
         resetsAt: null,
         valueLabel: null,
         detail: null,
       },
       {
-        label: "GPT-5.3-Codex-Spark · 5h limit",
+        label: "GPT-5.3-Codex-Spark · 5h",
+        windowDurationSeconds: 18000,
+        windowKind: "five_hour",
         usedPercent: 8,
         resetsAt: null,
         valueLabel: null,
         detail: null,
       },
       {
-        label: "GPT-5.3-Codex-Spark · Weekly limit",
+        label: "GPT-5.3-Codex-Spark · 7d",
+        windowDurationSeconds: 604800,
+        windowKind: "weekly",
         usedPercent: 20,
         resetsAt: null,
         valueLabel: null,
@@ -816,6 +824,8 @@ describe("mapCodexRpcQuota", () => {
     expect(snapshot.windows).toEqual([
       {
         label: "Credits",
+        windowDurationSeconds: null,
+        windowKind: "credits",
         usedPercent: null,
         resetsAt: null,
         valueLabel: "$12.34 remaining",

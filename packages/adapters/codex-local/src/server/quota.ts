@@ -210,14 +210,36 @@ class CodexQuotaAuthError extends Error {
  */
 export function secondsToWindowLabel(
   seconds: number | null | undefined,
-  fallback: string,
+  fallback = "Unknown window",
 ): string {
-  if (seconds == null) return fallback;
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return fallback;
   const hours = seconds / 3600;
-  if (hours < 6) return "5h";
-  if (hours <= 24) return "24h";
-  if (hours <= 168) return "7d";
+  if (seconds === 18_000) return "5h";
+  if (seconds === 604_800) return "7d";
+  if (hours < 24) return `${Math.round(hours)}h`;
   return `${Math.round(hours / 24)}d`;
+}
+
+function quotaWindowKind(seconds: number | null | undefined): QuotaWindow["windowKind"] {
+  if (!Number.isFinite(seconds) || !seconds || seconds <= 0) return "unknown";
+  if (seconds === 18_000) return "five_hour";
+  if (seconds === 604_800) return "weekly";
+  return "other";
+}
+
+function codexWindow(labelFallback: string, usedPercent: number | null | undefined,
+  resetsAt: string | null, windowDurationSeconds: number | null | undefined): QuotaWindow {
+  const duration = Number.isFinite(windowDurationSeconds) && Number(windowDurationSeconds) > 0
+    ? Number(windowDurationSeconds) : null;
+  return {
+    label: secondsToWindowLabel(duration, "Unknown window"),
+    windowDurationSeconds: duration,
+    windowKind: quotaWindowKind(duration),
+    usedPercent: normalizeCodexUsedPercent(usedPercent),
+    resetsAt,
+    valueLabel: null,
+    detail: duration == null ? `${labelFallback}: provider did not return a window duration` : null,
+  };
 }
 
 /** fetch with an abort-based timeout so a hanging provider api doesn't block the response indefinitely */
@@ -305,35 +327,33 @@ export async function fetchCodexQuota(
   const rateLimit = body.rate_limit;
   if (rateLimit?.primary_window != null) {
     const w = rateLimit.primary_window;
-    windows.push({
-      label: "5h limit",
-      usedPercent: normalizeCodexUsedPercent(w.used_percent),
-      resetsAt:
-        typeof w.reset_at === "number"
-          ? unixSecondsToIso(w.reset_at)
-          : (w.reset_at ?? null),
-      valueLabel: null,
-      detail: null,
-    });
+    windows.push(codexWindow(
+      "primary window",
+      w.used_percent,
+      typeof w.reset_at === "number"
+        ? unixSecondsToIso(w.reset_at)
+        : (w.reset_at ?? null),
+      w.limit_window_seconds,
+    ));
   }
   if (rateLimit?.secondary_window != null) {
     const w = rateLimit.secondary_window;
-    windows.push({
-      label: "Weekly limit",
-      usedPercent: normalizeCodexUsedPercent(w.used_percent),
-      resetsAt:
-        typeof w.reset_at === "number"
-          ? unixSecondsToIso(w.reset_at)
-          : (w.reset_at ?? null),
-      valueLabel: null,
-      detail: null,
-    });
+    windows.push(codexWindow(
+      "secondary window",
+      w.used_percent,
+      typeof w.reset_at === "number"
+        ? unixSecondsToIso(w.reset_at)
+        : (w.reset_at ?? null),
+      w.limit_window_seconds,
+    ));
   }
   if (body.credits != null && body.credits.unlimited !== true) {
     const balance = body.credits.balance;
     const valueLabel = balance != null ? `$${(balance / 100).toFixed(2)} remaining` : "N/A";
     windows.push({
       label: "Credits",
+      windowDurationSeconds: null,
+      windowKind: "credits",
       usedPercent: null,
       resetsAt: null,
       valueLabel,
@@ -382,6 +402,7 @@ export interface CodexRpcQuotaSnapshot {
   windows: QuotaWindow[];
   email: string | null;
   planType: string | null;
+  paidCreditsAllowed: boolean;
 }
 
 function unixSecondsToIso(value: number | null | undefined): string | null {
@@ -389,14 +410,18 @@ function unixSecondsToIso(value: number | null | undefined): string | null {
   return new Date(value * 1000).toISOString();
 }
 
-function buildCodexRpcWindow(label: string, window: CodexRpcWindow | null | undefined): QuotaWindow | null {
+function buildCodexRpcWindow(window: CodexRpcWindow | null | undefined, prefix = ""): QuotaWindow | null {
   if (!window) return null;
+  const duration = typeof window.windowDurationMins === "number" && window.windowDurationMins > 0
+    ? window.windowDurationMins * 60 : null;
   return {
-    label,
+    label: `${prefix}${secondsToWindowLabel(duration, "Unknown window")}`,
+    windowDurationSeconds: duration,
+    windowKind: quotaWindowKind(duration),
     usedPercent: normalizeCodexUsedPercent(window.usedPercent),
     resetsAt: unixSecondsToIso(window.resetsAt),
     valueLabel: null,
-    detail: null,
+    detail: duration == null ? "provider did not return a window duration" : null,
   };
 }
 
@@ -430,6 +455,11 @@ export function mapCodexRpcQuota(result: CodexRpcRateLimitsResult, account?: Cod
   }
   if (!allLimits.has("codex") && rootLimit) allLimits.set("codex", rootLimit);
 
+  const rootCredits = allLimits.get("codex")?.credits;
+  const paidCreditsAllowed = rootCredits?.hasCredits === false
+    && rootCredits.unlimited === false
+    && (rootCredits.balance === 0 || rootCredits.balance === "0");
+
   for (const limitId of limitOrder) {
     const limit = allLimits.get(limitId);
     if (!limit) continue;
@@ -437,13 +467,15 @@ export function mapCodexRpcQuota(result: CodexRpcRateLimitsResult, account?: Cod
       limitId === "codex"
         ? ""
         : `${limit.limitName ?? limitId} · `;
-    const primary = buildCodexRpcWindow(`${prefix}5h limit`, limit.primary);
+    const primary = buildCodexRpcWindow(limit.primary, prefix);
     if (primary) windows.push(primary);
-    const secondary = buildCodexRpcWindow(`${prefix}Weekly limit`, limit.secondary);
+    const secondary = buildCodexRpcWindow(limit.secondary, prefix);
     if (secondary) windows.push(secondary);
     if (limitId === "codex" && limit.credits && limit.credits.unlimited !== true) {
       windows.push({
         label: "Credits",
+        windowDurationSeconds: null,
+        windowKind: "credits",
         usedPercent: null,
         resetsAt: null,
         valueLabel: parseCreditBalance(limit.credits.balance) ?? "N/A",
@@ -462,6 +494,7 @@ export function mapCodexRpcQuota(result: CodexRpcRateLimitsResult, account?: Cod
       typeof account?.account?.planType === "string" && account.account.planType.trim().length > 0
         ? account.account.planType.trim()
         : (typeof rootLimit?.planType === "string" && rootLimit.planType.trim().length > 0 ? rootLimit.planType.trim() : null),
+    paidCreditsAllowed,
   };
 }
 
@@ -661,11 +694,12 @@ export function readCodexQuotaErrorFamily(error: unknown): CodexAuthRefreshFailu
 export async function getQuotaWindows(): Promise<ProviderQuotaResult> {
   const errors: string[] = [];
   let rpcErrorFamily: CodexAuthRefreshFailureClass | null = null;
+  const capturedAt = () => new Date().toISOString();
 
   try {
     const rpc = await fetchCodexRpcQuota();
     if (rpc.windows.length > 0) {
-      return { provider: "openai", source: CODEX_USAGE_SOURCE_RPC, ok: true, windows: rpc.windows };
+      return { provider: "openai", source: CODEX_USAGE_SOURCE_RPC, ok: true, capturedAt: capturedAt(), windows: rpc.windows };
     }
   } catch (error) {
     errors.push(formatProviderError("Codex app-server", error));
@@ -679,7 +713,7 @@ export async function getQuotaWindows(): Promise<ProviderQuotaResult> {
   if (auth) {
     try {
       const windows = await fetchCodexQuota(auth.token, auth.accountId);
-      return { provider: "openai", source: CODEX_USAGE_SOURCE_WHAM, ok: true, windows };
+      return { provider: "openai", source: CODEX_USAGE_SOURCE_WHAM, ok: true, capturedAt: capturedAt(), windows };
     } catch (error) {
       errors.push(formatProviderError("ChatGPT WHAM usage", error));
       const errorFamily = readCodexQuotaErrorFamily(error);
@@ -690,6 +724,7 @@ export async function getQuotaWindows(): Promise<ProviderQuotaResult> {
           ok: false,
           errorFamily,
           error: errors.join("; "),
+          capturedAt: capturedAt(),
           windows: [],
         };
       }
@@ -701,6 +736,7 @@ export async function getQuotaWindows(): Promise<ProviderQuotaResult> {
   const result: ProviderQuotaResult = {
     provider: "openai",
     ok: false,
+    capturedAt: capturedAt(),
     error: errors.join("; "),
     windows: [],
   };

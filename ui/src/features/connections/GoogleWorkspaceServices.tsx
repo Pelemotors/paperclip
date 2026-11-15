@@ -84,7 +84,7 @@ function ServicePicker({ onContinue, onCancel, initial = GOOGLE_WORKSPACE_DEFAUL
     <DialogContent className="sm:max-w-3xl">
       <DialogHeader className="text-left">
         <div className="flex items-center gap-3"><AppLogo name="Google Workspace" brandKey="google" size={40} /><DialogTitle>Connect Google Workspace</DialogTitle></div>
-        <DialogDescription className="sr-only">Choose the Google services to connect.</DialogDescription>
+        <DialogDescription>Choose the services to connect. Gmail read-only still grants Google broad mailbox-level access; Paperclip applies an additional registration-specific filter and never exposes the mailbox as a general worker tool.</DialogDescription>
       </DialogHeader>
       <GoogleWorkspaceServiceFields value={selection} onChange={setSelection} />
       {empty && <p role="status" className="text-xs text-muted-foreground">Select at least one service to continue.</p>}

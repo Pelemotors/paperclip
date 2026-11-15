@@ -279,7 +279,17 @@ export async function fetchClaudeQuota(token: string, signal?: AbortSignal): Pro
       "anthropic-beta": "oauth-2025-04-20",
     },
   });
-  if (!resp.ok) throw new Error(`anthropic usage api returned ${resp.status}`);
+  if (!resp.ok) {
+    if (resp.status === 429) {
+      const retryAfter = resp.headers.get("retry-after");
+      const seconds = retryAfter && /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter.trim()) : null;
+      const error = new Error(`Anthropic usage endpoint is temporarily rate limited (429)${seconds != null ? `; retry after ${seconds}s` : ""}. This is not evidence that the subscription quota is exhausted.`) as Error & { errorFamily?: string; retryAfterSeconds?: number };
+      error.errorFamily = "rate_limited";
+      if (seconds != null) error.retryAfterSeconds = seconds;
+      throw error;
+    }
+    throw new Error(`anthropic usage api returned ${resp.status}`);
+  }
   const body = (await resp.json()) as AnthropicUsageResponse;
   const windows: QuotaWindow[] = [];
 
@@ -559,7 +569,7 @@ export async function getQuotaWindows(): Promise<ProviderQuotaResult> {
   if (token) {
     try {
       const windows = await fetchClaudeQuota(token);
-      return { provider: "anthropic", source: CLAUDE_USAGE_SOURCE_OAUTH, ok: true, windows };
+      return { provider: "anthropic", source: CLAUDE_USAGE_SOURCE_OAUTH, ok: true, capturedAt: new Date().toISOString(), windows };
     } catch (error) {
       errors.push(formatProviderError("Anthropic OAuth usage", error));
     }
@@ -567,7 +577,7 @@ export async function getQuotaWindows(): Promise<ProviderQuotaResult> {
 
   try {
     const windows = await fetchClaudeCliQuota();
-    return { provider: "anthropic", source: CLAUDE_USAGE_SOURCE_CLI, ok: true, windows };
+    return { provider: "anthropic", source: CLAUDE_USAGE_SOURCE_CLI, ok: true, capturedAt: new Date().toISOString(), windows };
   } catch (error) {
     errors.push(formatProviderError("Claude CLI /usage", error));
   }

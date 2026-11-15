@@ -556,6 +556,12 @@ export function Costs({
     return map;
   }, [quotaData]);
 
+  const quotaCapturedAtByProvider = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const result of quotaData ?? []) if (result.capturedAt) map.set(result.provider, result.capturedAt);
+    return map;
+  }, [quotaData]);
+
   const deficitNotchByProvider = useMemo(() => {
     const map = new Map<string, boolean>();
     if (preset !== "mtd") return map;
@@ -1128,6 +1134,7 @@ export function Costs({
                       quotaWindows={quotaWindowsByProvider.get(provider) ?? []}
                           quotaError={quotaErrorsByProvider.get(provider) ?? null}
                           quotaSource={quotaSourcesByProvider.get(provider) ?? null}
+                          quotaCapturedAt={quotaCapturedAtByProvider.get(provider) ?? null}
                           quotaLoading={quotaLoading}
                         />
                       ))}
@@ -1151,6 +1158,7 @@ export function Costs({
                       quotaWindows={quotaWindowsByProvider.get(provider) ?? []}
                       quotaError={quotaErrorsByProvider.get(provider) ?? null}
                       quotaSource={quotaSourcesByProvider.get(provider) ?? null}
+                      quotaCapturedAt={quotaCapturedAtByProvider.get(provider) ?? null}
                       quotaLoading={quotaLoading}
                     />
                   </TabsContent>

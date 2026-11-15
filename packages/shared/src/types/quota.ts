@@ -2,6 +2,10 @@
 export interface QuotaWindow {
   /** human label, e.g. "5h", "7d", "Sonnet 7d", "Credits" */
   label: string;
+  /** Actual provider-reported duration, in seconds. Null means it was not returned. */
+  windowDurationSeconds?: number | null;
+  /** Stable classification used for enforcement; labels are display-only. */
+  windowKind?: "five_hour" | "weekly" | "other" | "unknown" | "credits";
   /** percent of the window already consumed (0-100), null when not reported */
   usedPercent: number | null;
   /** iso timestamp when this window resets, null when not reported */
@@ -19,7 +23,7 @@ export interface ProviderQuotaResult {
   /** Connection, grant and credential revision; never a credential value. */
   accountKey?: string;
   accountLabel?: string;
-  capturedAt?: string;
+  capturedAt?: string | null;
   /** source label when the provider reports where the quota data came from */
   source?: string | null;
   /** true when the fetch succeeded and windows is populated */

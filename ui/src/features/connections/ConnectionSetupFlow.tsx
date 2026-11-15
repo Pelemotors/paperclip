@@ -2321,7 +2321,7 @@ function StandardConnectionSetupFlow({
 
   if (workspaceConsent) return <GoogleWorkspaceServicesDialog
     connection={workspaceConnection}
-    initial={workspaceDraft}
+    initial={workspaceDraft ?? (entry?.slug === "gmail" ? { gmail: "read" } : undefined)}
     onCancel={selection => { if (selection) setWorkspaceDraft(selection); setWorkspaceConsent(null); setOAuthPhase("entry"); onPhaseChange?.("requested"); }}
     onContinue={selection => {
       workspaceSelectionRef.current = selection;

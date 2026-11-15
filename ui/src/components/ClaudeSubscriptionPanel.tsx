@@ -5,6 +5,7 @@ import { cn, quotaSourceDisplayName } from "@/lib/utils";
 interface ClaudeSubscriptionPanelProps {
   windows: QuotaWindow[];
   source?: string | null;
+  capturedAt?: string | null;
   error?: string | null;
 }
 
@@ -55,6 +56,7 @@ function fillClass(usedPercent: number | null): string {
 export function ClaudeSubscriptionPanel({
   windows,
   source = null,
+  capturedAt = null,
   error = null,
 }: ClaudeSubscriptionPanelProps) {
   const ordered = orderedWindows(windows);
@@ -72,7 +74,7 @@ export function ClaudeSubscriptionPanel({
         </div>
         {source ? (
           <span className="shrink-0 border border-border px-2.5 py-1 text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
-            {quotaSourceDisplayName(source)}
+            {quotaSourceDisplayName(source)}{capturedAt ? ` · checked ${new Date(capturedAt).toLocaleTimeString()}` : ""}
           </span>
         ) : null}
       </div>
@@ -86,7 +88,11 @@ export function ClaudeSubscriptionPanel({
       <div className="mt-4 space-y-4">
         {ordered.map((window) => {
           const normalized = normalizeLabel(window.label);
-          const detail = detailText(window);
+          const duration = window.windowDurationSeconds == null ? null
+            : window.windowDurationSeconds === 18_000 ? "5h window"
+              : window.windowDurationSeconds === 604_800 ? "7d window"
+                : `${window.windowDurationSeconds}s window`;
+          const detail = [duration, detailText(window)].filter(Boolean).join(" · ") || null;
           if (normalized === "extrausage") {
             return (
               <div

@@ -39,6 +39,7 @@ interface ProviderQuotaCardProps {
   quotaRequestFailed?: boolean;
   quotaError?: string | null;
   quotaSource?: string | null;
+  quotaCapturedAt?: string | null;
   quotaLoading?: boolean;
 }
 
@@ -56,6 +57,7 @@ export function ProviderQuotaCard({
   quotaWindows = [],
   quotaError = null,
   quotaSource = null,
+  quotaCapturedAt = null,
   quotaLoading = false,
 }: ProviderQuotaCardProps) {
   // single-pass aggregation over rows — memoized so the 8 derived values are not
@@ -326,7 +328,7 @@ export function ProviderQuotaCard({
                 </p>
                 {quotaSource && !isClaudeQuotaPanel && !isCodexQuotaPanel ? (
                   <span className="text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
-                    {quotaSourceDisplayName(quotaSource)}
+                    {quotaSourceDisplayName(quotaSource)}{quotaCapturedAt ? ` · checked ${new Date(quotaCapturedAt).toLocaleTimeString()}` : ""}
                   </span>
                 ) : null}
               </div>
@@ -335,9 +337,9 @@ export function ProviderQuotaCard({
               ) : quotaAccounts?.length ? (
                 <AccountQuotaPanels accounts={quotaAccounts} failed={quotaRequestFailed} />
               ) : isClaudeQuotaPanel ? (
-                <ClaudeSubscriptionPanel windows={quotaWindows} source={quotaSource} error={quotaError} />
+                <ClaudeSubscriptionPanel windows={quotaWindows} source={quotaSource} capturedAt={quotaCapturedAt} error={quotaError} />
               ) : isCodexQuotaPanel ? (
-                <CodexSubscriptionPanel windows={quotaWindows} source={quotaSource} error={quotaError} />
+                <CodexSubscriptionPanel windows={quotaWindows} source={quotaSource} capturedAt={quotaCapturedAt} error={quotaError} />
               ) : (
                 <>
                   {quotaError ? (
@@ -358,7 +360,7 @@ export function ProviderQuotaCard({
                       return (
                         <div key={qw.label} className="space-y-1">
                           <div className="flex items-center justify-between gap-2 text-xs">
-                            <span className="font-mono text-muted-foreground shrink-0">{qw.label}</span>
+                            <span className="font-mono text-muted-foreground shrink-0">{qw.label}{qw.windowDurationSeconds ? ` · ${Math.round(qw.windowDurationSeconds / 3600)}h window` : ""}</span>
                             <span className="flex-1" />
                             {qw.valueLabel != null ? (
                               <span className="font-medium tabular-nums">{qw.valueLabel}</span>

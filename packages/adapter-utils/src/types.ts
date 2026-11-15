@@ -422,10 +422,16 @@ export interface HireApprovedHookResult {
 // Quota window types — used by adapters that can report provider quota/rate-limit state
 // ---------------------------------------------------------------------------
 
+export type QuotaWindowKind = "five_hour" | "weekly" | "other" | "unknown" | "credits";
+
 /** a single rate-limit or usage window returned by a provider quota API */
 export interface QuotaWindow {
-  /** human label, e.g. "5h", "7d", "Sonnet 7d", "Credits" */
+  /** human label derived from the provider duration, or an explicit unknown label */
   label: string;
+  /** provider-reported duration; null means the provider did not identify the window */
+  windowDurationSeconds?: number | null;
+  /** semantic classification used for enforcement; never inferred from display text */
+  windowKind?: QuotaWindowKind;
   /** percent of the window already consumed (0-100), null when not reported */
   usedPercent: number | null;
   /** iso timestamp when this window resets, null when not reported */
@@ -448,6 +454,8 @@ export interface ProviderQuotaResult {
   errorFamily?: AdapterExecutionErrorFamily | null;
   /** error message when ok is false */
   error?: string;
+  /** capture time for the provider snapshot */
+  capturedAt?: string | null;
   windows: QuotaWindow[];
 }
 

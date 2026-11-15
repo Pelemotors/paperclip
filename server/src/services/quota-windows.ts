@@ -102,6 +102,7 @@ export async function fetchCompanyQuotaWindows(db: Db, companyId: string, userId
           const missing = message === "credentials_unavailable";
           const invalid = message === "authentication_required" || (credentialResolved && /\b401\b|refresh_token_(?:reused|expired|invalidated)/i.test(message));
           const errorFamily = missing ? "credentials_unavailable" : invalid ? "authentication_required"
+            : typeof (error as { errorFamily?: unknown })?.errorFamily === "string" ? (error as { errorFamily: string }).errorFamily
             : credentialResolved && /\b403\b/.test(message) ? "permission_denied" : "provider_unavailable";
           logger.warn({ companyId, accountKey, provider: base.provider, authenticationFailed: invalid }, "Connected account quota unavailable");
           return { ...base, ok: false, windows: [], error: publicError,

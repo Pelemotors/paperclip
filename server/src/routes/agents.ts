@@ -5936,6 +5936,73 @@ export function agentRoutes(
     res.json(redactAgentRowForResponse(agent));
   });
 
+  // The native lifecycle service remains the only state transition owner. A
+  // CEO agent may manage a direct worker through this narrow route, while
+  // board-only controls and all self/CEO changes remain on the existing
+  // governed routes below.
+  router.post("/agents/:id/lifecycle", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await getAccessibleAgent(req, res, id);
+    if (!existing) return;
+    if (req.actor.type !== "agent" || !req.actor.agentId) {
+      throw forbidden("Only the Paperclip CEO agent may manage a worker lifecycle through this route");
+    }
+    const actorAgent = await svc.getById(req.actor.agentId);
+    if (!actorAgent || actorAgent.companyId !== existing.companyId || actorAgent.role !== "ceo") {
+      throw forbidden("Only the company CEO may manage a worker lifecycle");
+    }
+    if (actorAgent.id === existing.id || existing.role === "ceo") {
+      throw forbidden("The CEO cannot change its own or another CEO lifecycle");
+    }
+    if (existing.reportsTo !== actorAgent.id) {
+      throw forbidden("The CEO may manage only a direct worker report");
+    }
+    const action = req.body?.action;
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 2000) : "CEO lifecycle management";
+    if (!["pause", "resume", "terminate"].includes(action)) {
+      throw badRequest("Lifecycle action must be pause, resume or terminate");
+    }
+    const decision = await access.decide({
+      actor: req.actor,
+      action: "agent_config:update",
+      resource: { type: "agent", companyId: existing.companyId, agentId: existing.id },
+      scope: { requiresChangeGrant: true },
+    });
+    if (!decision.allowed) throw forbidden(decision.explanation, authorizationDeniedDetails(decision));
+
+    let agent;
+    if (action === "pause") {
+      agent = await svcLifecycle.pauseAgent(id);
+      if (agent) await heartbeat.cancelActiveForAgent(id);
+    } else if (action === "resume") {
+      if (existing.orgChainHealth?.status === "invalid_org_chain") {
+        throw conflict(existing.orgChainHealth.repairGuidance ?? "Repair the reporting chain before resuming the worker");
+      }
+      agent = await svcLifecycle.resumeAgent(id);
+    } else {
+      agent = await svcLifecycle.terminateAgent(id);
+      if (agent) await heartbeat.cancelInvocationsForAgents([id], AGENT_TERMINATED_STOP_REASON);
+    }
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: agent.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      agentApiKeyId: actor.agentApiKeyId,
+      action: `agent.${action === "terminate" ? "terminated" : action === "pause" ? "paused" : "resumed"}`,
+      entityType: "agent",
+      entityId: agent.id,
+      details: { source: "ceo_lifecycle_tool", reason },
+    });
+    res.json(redactAgentRowForResponse(agent));
+  });
+
   router.post("/agents/:id/pause", async (req, res) => {
     assertBoard(req);
     const id = req.params.id as string;

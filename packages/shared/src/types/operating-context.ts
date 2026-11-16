@@ -13,7 +13,8 @@ export interface ProviderOperationalObservation {
   blockingReasons: string[];
   windows: QuotaWindow[];
   extraUsageEnabled: boolean | null;
-  paidCreditsAllowed: boolean;
+  /** True only when the provider explicitly reports no paid credits available. */
+  paidCreditsBlocked: boolean;
   capturedAt: string | null;
   source: string;
   stale: boolean;

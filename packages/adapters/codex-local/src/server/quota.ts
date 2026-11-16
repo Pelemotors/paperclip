@@ -402,7 +402,8 @@ export interface CodexRpcQuotaSnapshot {
   windows: QuotaWindow[];
   email: string | null;
   planType: string | null;
-  paidCreditsAllowed: boolean;
+  /** True only when the account explicitly reports no paid credits available. */
+  paidCreditsBlocked: boolean;
 }
 
 function unixSecondsToIso(value: number | null | undefined): string | null {
@@ -456,7 +457,7 @@ export function mapCodexRpcQuota(result: CodexRpcRateLimitsResult, account?: Cod
   if (!allLimits.has("codex") && rootLimit) allLimits.set("codex", rootLimit);
 
   const rootCredits = allLimits.get("codex")?.credits;
-  const paidCreditsAllowed = rootCredits?.hasCredits === false
+  const paidCreditsBlocked = rootCredits?.hasCredits === false
     && rootCredits.unlimited === false
     && (rootCredits.balance === 0 || rootCredits.balance === "0");
 
@@ -494,7 +495,7 @@ export function mapCodexRpcQuota(result: CodexRpcRateLimitsResult, account?: Cod
       typeof account?.account?.planType === "string" && account.account.planType.trim().length > 0
         ? account.account.planType.trim()
         : (typeof rootLimit?.planType === "string" && rootLimit.planType.trim().length > 0 ? rootLimit.planType.trim() : null),
-    paidCreditsAllowed,
+    paidCreditsBlocked,
   };
 }
 
